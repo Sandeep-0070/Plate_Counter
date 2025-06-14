@@ -1,25 +1,22 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import Webcam from "react-webcam";
 import axios from "axios";
 
 function App() {
   const webcamRef = useRef(null);
-  const [devices, setDevices] = useState([]);
-  const [deviceId, setDeviceId] = useState("");
   const [count, setCount] = useState(null);
+  const [facingMode, setFacingMode] = useState("environment"); // rear camera by default
 
-  // Get all video devices on mount
-  useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then((mediaDevices) => {
-      const videoDevices = mediaDevices.filter(
-        (device) => device.kind === "videoinput"
-      );
-      setDevices(videoDevices);
-      if (videoDevices.length > 0) {
-        setDeviceId(videoDevices[0].deviceId);
-      }
-    });
-  }, []);
+  const videoConstraints = {
+    facingMode: facingMode,
+    width: { ideal: 400 }
+  };
+
+  const toggleCamera = () => {
+    setFacingMode(prev =>
+      prev === "user" ? "environment" : "user"
+    );
+  };
 
   const captureAndSend = async () => {
     const imageSrc = webcamRef.current.getScreenshot();
@@ -39,30 +36,19 @@ function App() {
     <div style={{ textAlign: "center", padding: "20px" }}>
       <h1>Plate Counter App</h1>
 
-      <div>
-        <label>Choose Camera: </label>
-        <select
-          onChange={(e) => setDeviceId(e.target.value)}
-          value={deviceId}
-        >
-          {devices.map((device, index) => (
-            <option value={device.deviceId} key={index}>
-              {device.label || `Camera ${index + 1}`}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <Webcam
         ref={webcamRef}
         screenshotFormat="image/jpeg"
-        videoConstraints={{ deviceId: deviceId }}
-        style={{ width: 400, marginTop: 10 }}
+        videoConstraints={videoConstraints}
+        style={{ width: "90%", maxWidth: 400 }}
       />
-
       <br />
-      <button onClick={captureAndSend} style={{ marginTop: 10 }}>
-        Capture & Count Plates
+
+      <button onClick={captureAndSend}>Capture & Count Plates</button>
+      <br /><br />
+
+      <button onClick={toggleCamera}>
+        Switch to {facingMode === "user" ? "Rear" : "Front"} Camera
       </button>
 
       {count !== null && <h2>Detected Plates: {count}</h2>}
@@ -71,3 +57,4 @@ function App() {
 }
 
 export default App;
+
