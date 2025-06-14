@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 from io import BytesIO
 from plate_counter import count_plates_with_rotation
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -18,4 +19,5 @@ def count_plates():
     return jsonify({'count': count})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
