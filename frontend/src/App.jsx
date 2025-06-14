@@ -13,7 +13,7 @@ function App() {
     formData.append("file", blob, "capture.jpg");
 
     try {
-      const res = await axios.post("http://localhost:5000/count-plates", formData);
+      const res = await axios.post("https://plate-counter-backend.onrender.com/count-plates", formData);
       setCount(res.data.count);
     } catch (err) {
       console.error("Error:", err);
