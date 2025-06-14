@@ -1,11 +1,71 @@
-import React from "react";
-import CameraCapture from "./CameraCapture";
+import React, { useRef, useState, useEffect } from "react";
+import Webcam from "react-webcam";
+import axios from "axios";
 
 function App() {
+  const webcamRef = useRef(null);
+  const [devices, setDevices] = useState([]);
+  const [deviceId, setDeviceId] = useState("");
+  const [count, setCount] = useState(null);
+
+  // Get all video devices on mount
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices().then((mediaDevices) => {
+      const videoDevices = mediaDevices.filter(
+        (device) => device.kind === "videoinput"
+      );
+      setDevices(videoDevices);
+      if (videoDevices.length > 0) {
+        setDeviceId(videoDevices[0].deviceId);
+      }
+    });
+  }, []);
+
+  const captureAndSend = async () => {
+    const imageSrc = webcamRef.current.getScreenshot();
+    const blob = await (await fetch(imageSrc)).blob();
+    const formData = new FormData();
+    formData.append("file", blob, "capture.jpg");
+
+    try {
+      const res = await axios.post("https://plate-counter-backend.onrender.com/count-plates", formData);
+      setCount(res.data.count);
+    } catch (err) {
+      console.error("Error:", err);
+    }
+  };
+
   return (
-    <div className="App">
-      <h1>Plate Counter</h1>
-      <CameraCapture />
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <h1>Plate Counter App</h1>
+
+      <div>
+        <label>Choose Camera: </label>
+        <select
+          onChange={(e) => setDeviceId(e.target.value)}
+          value={deviceId}
+        >
+          {devices.map((device, index) => (
+            <option value={device.deviceId} key={index}>
+              {device.label || `Camera ${index + 1}`}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <Webcam
+        ref={webcamRef}
+        screenshotFormat="image/jpeg"
+        videoConstraints={{ deviceId: deviceId }}
+        style={{ width: 400, marginTop: 10 }}
+      />
+
+      <br />
+      <button onClick={captureAndSend} style={{ marginTop: 10 }}>
+        Capture & Count Plates
+      </button>
+
+      {count !== null && <h2>Detected Plates: {count}</h2>}
     </div>
   );
 }
