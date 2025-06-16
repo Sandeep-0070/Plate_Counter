@@ -7,7 +7,6 @@ function App() {
   const [count, setCount] = useState(null);
   const [facingMode, setFacingMode] = useState("environment");
   const [capturedImage, setCapturedImage] = useState(null);
-  const [isLoading, setIsLoading] = useState(false); // Loading state
 
   const videoConstraints = {
     facingMode: facingMode,
@@ -18,16 +17,13 @@ function App() {
     setFacingMode(prev =>
       prev === "user" ? "environment" : "user"
     );
-    setCapturedImage(null);
-    setCount(null);
-    setIsLoading(false);
+    setCapturedImage(null); // Reset the captured image when switching camera
+    setCount(null);         // Optional: Reset count on toggle
   };
 
   const captureAndSend = async () => {
     const imageSrc = webcamRef.current.getScreenshot();
-    setCapturedImage(imageSrc);
-    setIsLoading(true); // Start showing "Counting..."
-
+    setCapturedImage(imageSrc); // Freeze frame by storing it
     const blob = await (await fetch(imageSrc)).blob();
     const formData = new FormData();
     formData.append("file", blob, "capture.jpg");
@@ -37,15 +33,12 @@ function App() {
       setCount(res.data.count);
     } catch (err) {
       console.error("Error:", err);
-    } finally {
-      setIsLoading(false); // Stop showing "Counting..."
     }
   };
 
   const resetCamera = () => {
     setCapturedImage(null);
     setCount(null);
-    setIsLoading(false);
   };
 
   return (
@@ -81,11 +74,11 @@ function App() {
         Switch to {facingMode === "user" ? "Rear" : "Front"} Camera
       </button>
 
-      {/* Display Counting... or Count result */}
-      {isLoading && <h2>Counting...</h2>}
-      {!isLoading && count !== null && <h2>Detected Plates: {count}</h2>}
+      {count !== null && <h2>Detected Plates: {count}</h2>}
     </div>
   );
 }
 
 export default App;
+
+
