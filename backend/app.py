@@ -14,7 +14,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Health check
 @app.route("/")
 def index():
-    return "Employee Report API is running."
+    return "API is running."
 
 @app.route("/count-plates", methods=["POST"])
 def count_plates():
