@@ -7,6 +7,7 @@ function App() {
   const [count, setCount] = useState(null);
   const [facingMode, setFacingMode] = useState("environment");
   const [capturedImage, setCapturedImage] = useState(null);
+  const [isLoading, setIsLoading] = useState(false); // Loading state
 
   const videoConstraints = {
     facingMode: facingMode,
@@ -17,28 +18,34 @@ function App() {
     setFacingMode(prev =>
       prev === "user" ? "environment" : "user"
     );
-    setCapturedImage(null); // Reset the captured image when switching camera
-    setCount(null);         // Optional: Reset count on toggle
+    setCapturedImage(null);
+    setCount(null);
+    setIsLoading(false);
   };
 
   const captureAndSend = async () => {
     const imageSrc = webcamRef.current.getScreenshot();
-    setCapturedImage(imageSrc); // Freeze frame by storing it
+    setCapturedImage(imageSrc);
+    setIsLoading(true); // Start showing "Counting..."
+
     const blob = await (await fetch(imageSrc)).blob();
     const formData = new FormData();
     formData.append("file", blob, "capture.jpg");
 
     try {
-      const res = await axios.post("https://plate-counter-backend.onrender.com/count-plates", formData);
+      const res = await axios.post("http://127.0.0.1:5000/count-plates", formData);
       setCount(res.data.count);
     } catch (err) {
       console.error("Error:", err);
+    } finally {
+      setIsLoading(false); // Stop showing "Counting..."
     }
   };
 
   const resetCamera = () => {
     setCapturedImage(null);
     setCount(null);
+    setIsLoading(false);
   };
 
   return (
@@ -74,10 +81,11 @@ function App() {
         Switch to {facingMode === "user" ? "Rear" : "Front"} Camera
       </button>
 
-      {count !== null && <h2>Detected Plates: {count}</h2>}
+      {/* Display Counting... or Count result */}
+      {isLoading && <h2>Counting...</h2>}
+      {!isLoading && count !== null && <h2>Detected Plates: {count}</h2>}
     </div>
   );
 }
 
 export default App;
-
