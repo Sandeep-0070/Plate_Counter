@@ -2,21 +2,43 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2
 import numpy as np
-from PIL import Image
-from io import BytesIO
-from plate_counter import count_plates_with_rotation
 import os
+from plate_counter import crop_by_horizontal_bands, edge_based_plate_count_refined
 
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/count-plates', methods=['POST'])
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route("/count-plates", methods=["POST"])
 def count_plates():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
     file = request.files['file']
-    img = Image.open(file.stream).convert('RGB')
-    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    count = count_plates_with_rotation(img_cv)
-    return jsonify({'count': count})
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(filepath)
+
+    image = cv2.imread(filepath)
+    if image is None:
+        return jsonify({"error": "Invalid image"}), 400
+
+    try:
+        cropped_img = crop_by_horizontal_bands(image)
+        resized_img = cropped_img
+        h, w = cropped_img.shape[:2]
+        max_dim = 600
+        if max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            resized_img = cv2.resize(cropped_img, (int(w * scale), int(h * scale)))
+
+        count = edge_based_plate_count_refined(resized_img, visualize=False)
+        return jsonify({"count": count})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))

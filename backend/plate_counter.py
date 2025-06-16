@@ -1,45 +1,94 @@
-# plate_counter.py
 import cv2
 import numpy as np
 from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d
 
-def auto_rotate_image(image, debug=False):
+
+def crop_by_horizontal_bands(image: np.ndarray,
+                             clahe_clip_limit: float = 2.0,
+                             clahe_grid_size: tuple = (8, 8),
+                             gaussian_ksize: tuple = (5, 5),
+                             sobel_ksize: int = 3,
+                             profile_sigma: float = 3,
+                             threshold_ratio: float = 0.3,
+                             padding: int = 10) -> np.ndarray:
+    if image is None or image.size == 0:
+        return image
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-    lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=150)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=clahe_grid_size).apply(gray)
+    blurred = cv2.GaussianBlur(clahe, gaussian_ksize, 0)
 
-    if lines is None:
-        return image, 0
+    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=sobel_ksize)
+    vertical_edges = np.abs(sobel_y)
 
-    angles = []
-    for rho, theta in lines[:, 0]:
-        angle = (theta - np.pi / 2) * (180 / np.pi)
-        if -45 < angle < 45:
-            angles.append(angle)
+    edge_profile = vertical_edges.sum(axis=1)
+    smoothed_profile = gaussian_filter1d(edge_profile, sigma=profile_sigma)
 
-    if len(angles) == 0:
-        return image, 0
+    max_profile_value = np.max(smoothed_profile)
+    if max_profile_value == 0:
+        return image
 
-    median_angle = np.median(angles)
+    threshold = max_profile_value * threshold_ratio
+    band_indices = np.where(smoothed_profile > threshold)[0]
 
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    rot_mat = cv2.getRotationMatrix2D(center, median_angle, 1.0)
-    rotated = cv2.warpAffine(image, rot_mat, (w, h), flags=cv2.INTER_LINEAR,
-                             borderMode=cv2.BORDER_REPLICATE)
+    if len(band_indices) == 0:
+        return image
 
-    return rotated, median_angle
+    top = band_indices[0]
+    bottom = band_indices[-1]
 
-def count_plates_with_rotation(image, show_plot=False):
-    rotated_img, angle = auto_rotate_image(image, debug=False)
-    gray = cv2.cvtColor(rotated_img, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(gray, (5,5), 0)
-    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
-    grad = np.abs(sobel_y)
-    profile = grad.sum(axis=1)
-    window = 15
-    smooth = np.convolve(profile, np.ones(window)/window, mode='same')
-    peaks, _ = find_peaks(smooth, height=np.max(smooth)*0.3, distance=20)
-    return len(peaks)
+    top_cropped = max(0, top - padding)
+    bottom_cropped = min(image.shape[0], bottom + padding)
+
+    return image[top_cropped:bottom_cropped, :]
+
+
+def edge_based_plate_count_refined(img: np.ndarray,
+                                   visualize: bool = True,
+                                   clahe_clip_limit: float = 2.0,
+                                   clahe_grid_size: tuple = (8, 8),
+                                   gaussian_ksize: tuple = (5, 5),
+                                   sobel_ksize: int = 3,
+                                   profile_sigma: float = 1.2,
+                                   zone_width_ratio: float = 0.2,  # Ratio for left/right zones
+                                   peak_height: float = 0.1,
+                                   peak_distance: int = 8,
+                                   peak_prominence: float = 0.08,
+                                   min_peak_separation: int = 5) -> int:
+    if img is None or img.size == 0:
+        return 0
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=clahe_grid_size).apply(gray)
+    blurred = cv2.GaussianBlur(clahe, gaussian_ksize, 0)
+
+    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=sobel_ksize)
+    edge_map = np.abs(sobel_y)
+
+    h, w = edge_map.shape
+    if w == 0:
+        return 0
+
+    zone_width = max(1, int(w * zone_width_ratio))
+    left_zone = edge_map[:, :zone_width]
+    right_zone = edge_map[:, -zone_width:]
+
+    edge_strength_profile = np.minimum(left_zone.mean(axis=1), right_zone.mean(axis=1))
+    smoothed_profile = gaussian_filter1d(edge_strength_profile, sigma=profile_sigma)
+    max_profile_val = np.max(smoothed_profile)
+    normalized_profile = smoothed_profile / max_profile_val if max_profile_val > 0 else smoothed_profile
+
+    peaks, _ = find_peaks(normalized_profile,
+                          height=peak_height,
+                          distance=peak_distance,
+                          prominence=peak_prominence)
+
+    refined_peaks = []
+    if len(peaks) > 0:
+        refined_peaks.append(peaks[0])
+        for i in range(1, len(peaks)):
+            if (peaks[i] - refined_peaks[-1]) > min_peak_separation:
+                refined_peaks.append(peaks[i])
+
+    return len(refined_peaks)
