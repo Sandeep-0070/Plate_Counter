@@ -7,7 +7,8 @@ function App() {
   const [count, setCount] = useState(null);
   const [facingMode, setFacingMode] = useState("environment");
   const [capturedImage, setCapturedImage] = useState(null);
-  const [isLoading, setIsLoading] = useState(false); // Loading state
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null); // NEW
 
   const videoConstraints = {
     facingMode: facingMode,
@@ -15,18 +16,18 @@ function App() {
   };
 
   const toggleCamera = () => {
-    setFacingMode(prev =>
-      prev === "user" ? "environment" : "user"
-    );
+    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
     setCapturedImage(null);
     setCount(null);
+    setErrorMessage(null);
     setIsLoading(false);
   };
 
   const captureAndSend = async () => {
     const imageSrc = webcamRef.current.getScreenshot();
     setCapturedImage(imageSrc);
-    setIsLoading(true); // Start showing "Counting..."
+    setIsLoading(true);
+    setErrorMessage(null);
 
     const blob = await (await fetch(imageSrc)).blob();
     const formData = new FormData();
@@ -34,17 +35,26 @@ function App() {
 
     try {
       const res = await axios.post("https://plate-counter-backend.onrender.com/count-plates", formData);
-      setCount(res.data.count);
+      if (res.data.count !== null) {
+        setCount(res.data.count);
+        setErrorMessage(null);
+      } else {
+        setCount(null);
+        setErrorMessage("⚠ Try again");
+      }
     } catch (err) {
       console.error("Error:", err);
+      setErrorMessage("⚠ Error occurred");
+      setCount(null);
     } finally {
-      setIsLoading(false); // Stop showing "Counting..."
+      setIsLoading(false);
     }
   };
 
   const resetCamera = () => {
     setCapturedImage(null);
     setCount(null);
+    setErrorMessage(null);
     setIsLoading(false);
   };
 
@@ -81,9 +91,10 @@ function App() {
         Switch to {facingMode === "user" ? "Rear" : "Front"} Camera
       </button>
 
-      {/* Display Counting... or Count result */}
+      {/* Display status */}
       {isLoading && <h2>Counting...</h2>}
       {!isLoading && count !== null && <h2>Detected Plates: {count}</h2>}
+      {!isLoading && errorMessage && <h2 style={{ color: "red" }}>{errorMessage}</h2>}
     </div>
   );
 }
