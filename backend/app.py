@@ -9,6 +9,9 @@ from PIL import Image
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all domains
 
+# Global variable to hold cumulative count
+cumulative_count = 0
+
 
 def auto_crop_plate_band(image, edge_threshold=50, kernel_size=15):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -88,17 +91,26 @@ def process_image(image):
 
 @app.route('/count-plates', methods=['POST'])
 def count_plates():
+    global cumulative_count
     if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+        return jsonify({"count": None}), 400
 
     file = request.files['file']
-    img_bytes = file.read()
-    img = Image.open(BytesIO(img_bytes)).convert('RGB')
+    img = Image.open(BytesIO(file.read())).convert('RGB')
     img_np = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-    result = process_image(img_np)
+    count = process_image(img_np)
+    if count is not None:
+        cumulative_count += count
 
-    return jsonify({"count": result})
+    return jsonify({"count": count, "cumulative": cumulative_count})
+
+@app.route('/reset-batch', methods=['POST'])
+def reset_batch():
+    global cumulative_count
+    cumulative_count = 0
+    return jsonify({"message": "Batch reset successful", "cumulative": cumulative_count})
+
 
 
 # Health check
